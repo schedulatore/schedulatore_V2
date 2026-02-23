@@ -1,0 +1,27 @@
+{
+  "name": "schedulatore-server",
+  "version": "1.0.0",
+  "description": "Schedulatore Personale e di Team - Server Backend",
+  "main": "avvio.js",
+  "scripts": {
+    "start": "node avvio.js",
+    "dev": "node avvio.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "sql.js": "^1.11.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "nodemailer": "^6.9.16",
+    "date-holidays": "^3.23.12",
+    "uuid": "^9.0.1",
+    "helmet": "^8.0.0",
+    "express-rate-limit": "^7.5.0",
+    "validator": "^13.12.0",
+    "morgan": "^1.10.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

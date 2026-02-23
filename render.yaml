@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: schedulatore
+    runtime: node
+    buildCommand: chmod +x build.sh && bash build.sh
+    startCommand: cd server && node avvio.js
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: SEGRETO_JWT
+        generateValue: true
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_UTENTE
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
