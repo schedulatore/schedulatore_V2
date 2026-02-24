@@ -49,7 +49,7 @@ function PaginaPasswordDimenticata() {
 
         {passo === 1 && (
           <form onSubmit={inviaRichiesta}>
-            <p className="auth-subtitle">Inserisci la tua email per ricevere il codice di recupero</p>
+            <p className="auth-subtitle">Inserisci la tua email. Dopo aver cliccato, contatta l'amministratore per ricevere il codice di reset.</p>
             <div className="form-group">
               <label className="form-label">Email</label>
               <input type="email" className="form-input" value={email}
@@ -63,7 +63,7 @@ function PaginaPasswordDimenticata() {
 
         {passo === 2 && (
           <form onSubmit={reimpostaPassword}>
-            <p className="auth-subtitle">Inserisci il codice ricevuto e la nuova password</p>
+            <p className="auth-subtitle">Inserisci il codice che ti ha dato l'amministratore e la nuova password</p>
             <div className="form-group">
               <label className="form-label">Codice di Recupero</label>
               <input type="text" className="form-input" value={codice} placeholder="XXXXXXXX"

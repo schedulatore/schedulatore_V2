@@ -35,7 +35,9 @@ export const apiAuth = {
   logout: () => api.post('/auth/logout'),
   passwordDimenticata: (email) => api.post('/auth/password-dimenticata', { email }),
   reimpostaPassword: (dati) => api.post('/auth/reimposta-password', dati),
-  profilo: () => api.get('/auth/profilo')
+  profilo: () => api.get('/auth/profilo'),
+  resetPendenti: () => api.get('/auth/admin/reset-pendenti'),
+  resetForzato: (email, nuovaPassword) => api.post('/auth/admin/reset-forzato', { email, nuovaPassword })
 };
 
 // Obiettivi
@@ -50,8 +52,8 @@ export const apiObiettivi = {
   aggiornaPercentuale: (idSa, percentuale) => api.patch(`/obiettivi/sotto-attivita/${idSa}/percentuale`, { percentuale }),
   attivitaGiornaliere: (data) => api.get(`/obiettivi/giornaliere/${data}`),
   flagGiornaliero: (idMicro, flag) => api.patch(`/obiettivi/flag-giornaliero/${idMicro}`, { flag }),
-  inviaReport: () => api.post('/obiettivi/invia-report'),
-  testEmail: () => api.post('/obiettivi/test-email'),
+  inviaReport: () => Promise.resolve({ data: { messaggio: 'Report non disponibile' } }),
+  testEmail: () => Promise.resolve({ data: { messaggio: 'Email non configurata' } }),
   calendario: () => api.get('/obiettivi/calendario'),
   verificaConflitti: () => api.post('/obiettivi/verifica-conflitti'),
   sistemaConflitti: () => api.post('/obiettivi/sistema-conflitti'),
@@ -65,6 +67,10 @@ export const apiTeam = {
   dettaglio: (id) => api.get(`/team/${id}`),
   elimina: (id) => api.delete(`/team/${id}`),
   calendario: (id) => api.get(`/team/${id}/calendario`),
+  attivitaGiornaliere: (id, data) => api.get(`/team/${id}/giornaliere/${data}`),
+  flagGiornaliero: (id, idMicro, flag) => api.patch(`/team/${id}/flag-giornaliero/${idMicro}`, { flag }),
+  spostaMicro: (id, idMicro, nuova_data) => api.put(`/team/${id}/sposta-micro/${idMicro}`, { nuova_data }),
+  reportGiornaliero: (id, data) => api.get(`/team/${id}/report-giornaliero/${data}`),
   aggiungiMembro: (idTeam, dati) => api.post(`/team/${idTeam}/membri`, dati),
   modificaMembro: (idTeam, idMembro, dati) => api.put(`/team/${idTeam}/membri/${idMembro}`, dati),
   rimuoviMembro: (idTeam, idMembro) => api.delete(`/team/${idTeam}/membri/${idMembro}`)

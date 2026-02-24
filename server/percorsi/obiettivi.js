@@ -112,20 +112,6 @@ percorso.put('/sposta-micro/:idMicro', autenticaToken, (req, res) => {
   }
 });
 
-// POST /api/obiettivi/test-email — invia email di test per verificare configurazione
-percorso.post('/test-email', autenticaToken, (req, res) => {
-  const { inviaEmailTest } = require('../utilita/email');
-  inviaEmailTest(req.utente.email).then(risultato => {
-    if (risultato.successo) {
-      res.json({ messaggio: `✅ Email di test inviata a ${req.utente.email}! Controlla la tua casella (anche spam).`, dettagli: risultato });
-    } else {
-      res.status(500).json({ errore: `❌ Invio fallito: ${risultato.errore}`, codice: risultato.codice, dettagli: risultato });
-    }
-  }).catch(err => {
-    res.status(500).json({ errore: `❌ Errore: ${err.message}` });
-  });
-});
-
 // GET /api/obiettivi/giornaliere/:data — attività del giorno con flag
 percorso.get('/giornaliere/:data', autenticaToken, (req, res) => {
   try {
@@ -155,18 +141,6 @@ percorso.patch('/flag-giornaliero/:idMicro', autenticaToken, (req, res) => {
     if (flag !== 0 && flag !== 1) return res.status(400).json({ errore: 'Flag deve essere 0 o 1.' });
     db.prepara('UPDATE micro_attivita SET flag_giornaliero = ? WHERE id = ?').esegui(flag, parseInt(req.params.idMicro));
     res.json({ messaggio: 'Flag aggiornato.', flag });
-  } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
-});
-
-// POST /api/obiettivi/invia-report — invia report manualmente
-percorso.post('/invia-report', autenticaToken, (req, res) => {
-  try {
-    const { inviaReportGiornalieroTutti } = require('../utilita/cron');
-    inviaReportGiornalieroTutti().then(risultato => {
-      res.json({ messaggio: `Report inviati: ${risultato.inviati} (${risultato.personali || 0} personali, ${risultato.team || 0} team)`, ...risultato });
-    }).catch(err => {
-      res.status(500).json({ errore: err.message });
-    });
   } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
 });
 
@@ -263,14 +237,6 @@ percorso.post('/:id/sotto-attivita', autenticaToken, (req, res) => {
     const saAgg = db.prepara('SELECT * FROM sotto_attivita WHERE id = ?').ottieni(sa.id);
     if (saAgg) saAgg.micro_attivita = db.prepara('SELECT * FROM micro_attivita WHERE id_sotto_attivita = ? ORDER BY data').tutti(sa.id);
 
-    // Invia mail di assegnazione al responsabile
-    const emailResp = email_responsabile || req.utente.email;
-    if (emailResp && emailResp !== req.utente.email) {
-      const { inviaAssegnazioneSottoAttivita } = require('../utilita/email');
-      const nomeTeam = obiettivo.id_team ? db.prepara('SELECT nome FROM team WHERE id = ?').ottieni(obiettivo.id_team)?.nome : null;
-      inviaAssegnazioneSottoAttivita(emailResp, nome, obiettivo.nome, ore_totali, ore_per_giorno, saAgg?.data_fine_stimata, nomeTeam).catch(console.error);
-    }
-
     res.status(201).json({ sotto_attivita: saAgg });
   } catch (err) { console.error('Errore creazione sotto-attività:', err); res.status(500).json({ errore: 'Errore del server.' }); }
 });
@@ -353,15 +319,4 @@ percorso.patch('/micro/:idMicro/flag-giornaliero', autenticaToken, (req, res) =>
   } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
 });
 
-// POST /api/obiettivi/invia-report — Invio manuale report giornaliero
-percorso.post('/invia-report', autenticaToken, async (req, res) => {
-  try {
-    const { jobReportGiornaliero } = require('../utilita/jobSchedulati');
-    const oggi = new Date().toISOString().split('T')[0];
-    const risultato = await jobReportGiornaliero(oggi);
-    res.json({ messaggio: `Report inviati: ${risultato.personali} personali, ${risultato.team} team.`, ...risultato });
-  } catch (err) {
-    console.error('Errore invio report manuale:', err);
-    res.status(500).json({ errore: 'Errore del server.' });
-  }
-});
+module.exports = percorso;

@@ -5,10 +5,7 @@ const morgan = require('morgan');
 const percorso = require('path');
 const fs = require('fs');
 const { inizializzaDatabase } = require('./utilita/database');
-const { ottieniTrasportatore } = require('./utilita/email');
-const { avviaCron } = require('./utilita/cron');
 const { sanificaBody } = require('./middleware/validazione');
-const { avviaJobSchedulati } = require('./utilita/jobSchedulati');
 
 const percorsiAuth = require('./percorsi/autenticazione');
 const percorsiObiettivi = require('./percorsi/obiettivi');
@@ -79,12 +76,10 @@ app.use((err, req, res, next) => {
 async function avvia() {
   try {
     await inizializzaDatabase();
-    ottieniTrasportatore().catch(err => console.error('Errore configurazione email:', err));
 
     app.listen(PORTA, '0.0.0.0', () => {
       console.log(`\n🚀 Server Schedulatore avviato sulla porta ${PORTA}`);
       console.log(`   URL App: ${HOST_APP}`);
-      avviaCron();
       console.log(`\n🛡️  Sicurezza attiva:`);
       console.log(`   ✓ Helmet (header HTTP sicuri)`);
       console.log(`   ✓ CORS ristretto`);
@@ -94,9 +89,6 @@ async function avvia() {
       console.log(`   ✓ Logging su console + file`);
       console.log(`   ✓ Logout lato server (lista nera token)`);
       console.log(`   ✓ JWT durata 1 giorno\n`);
-
-      // Avvia job schedulati (report 17:00, scadenze 09:00)
-      avviaJobSchedulati();
     });
   } catch (err) {
     console.error('Errore avvio server:', err);

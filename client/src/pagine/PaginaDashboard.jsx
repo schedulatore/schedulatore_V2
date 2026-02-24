@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiObiettivi, apiTeam } from '../utilita/api.js';
+import { apiObiettivi, apiTeam, apiAuth } from '../utilita/api.js';
 
 // Donut SVG component
 function GraficoDonut({ dati, dimensione = 140 }) {
@@ -110,23 +110,19 @@ function PaginaDashboard({ utente }) {
         <div className="stat-card" onClick={() => naviga('/calendario')}><div className="stat-icon">{numConflitti > 0 ? '🔴' : '🟢'}</div><div className="stat-value">{numConflitti}</div><div className="stat-label">Conflitti</div></div>
       </div>
 
-      {/* Report manuale */}
-      <div className="card" style={{ marginTop: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: 14 }}>📧 Report Giornaliero</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Automatico alle 17:00 oppure manuale</div>
+      {/* Admin: Reset password pendenti (solo utente id=1) */}
+      {utente?.id === 1 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>🔐 Admin — Reset Password</div>
+            <button className="btn btn-secondary btn-sm" onClick={async () => {
+              try { const ris = await apiAuth.resetPendenti(); impostaMsgSuccesso(JSON.stringify(ris.data.pendenti?.map(p => `${p.email}: ${p.token_reset}`) || 'Nessun reset pendente')); setTimeout(() => impostaMsgSuccesso(''), 10000); }
+              catch (e) { impostaMsgSuccesso('Errore.'); }
+            }}>📋 Vedi Codici Pendenti</button>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Quando un utente chiede il reset, il codice appare qui. Comunicaglielo tu.</div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-secondary btn-sm" onClick={async () => {
-            try { const ris = await apiObiettivi.testEmail(); impostaMsgSuccesso(ris.data.messaggio); setTimeout(() => impostaMsgSuccesso(''), 6000); }
-            catch (e) { impostaMsgSuccesso('❌ ' + (e.response?.data?.errore || 'Email non funziona. Controlla le variabili SMTP su Render.')); setTimeout(() => impostaMsgSuccesso(''), 8000); }
-          }}>🧪 Test Email</button>
-          <button className="btn btn-secondary btn-sm" onClick={async () => {
-            try { const ris = await apiObiettivi.inviaReport(); impostaMsgSuccesso(ris.data.messaggio); setTimeout(() => impostaMsgSuccesso(''), 5000); }
-            catch (e) { impostaMsgSuccesso('Errore invio report.'); setTimeout(() => impostaMsgSuccesso(''), 4000); }
-          }}>📤 Invia Report</button>
-        </div>
-      </div>
+      )}
 
       {/* Grafico Donut + Lista */}
       {obiettivi.length > 0 && (

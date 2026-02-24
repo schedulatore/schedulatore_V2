@@ -1,7 +1,7 @@
 const express = require('express');
 const { ottieniDb } = require('../utilita/database');
 const { autenticaToken } = require('../middleware/autenticazione');
-const { inviaInvitoTeam } = require('../utilita/email');
+const { eGiornoLavorativo, prossimoGiornoLavorativo } = require('../utilita/schedulatore');
 
 const percorso = express.Router();
 
@@ -56,7 +56,7 @@ percorso.post('/', autenticaToken, async (req, res) => {
       const utenteSponsor = db.prepara('SELECT id FROM utenti WHERE email = ?').ottieni(email_sponsor.trim());
       db.prepara('INSERT INTO membri_team (id_team, email_utente, id_utente, ruolo, iscritto) VALUES (?, ?, ?, ?, ?)')
         .esegui(idTeam, email_sponsor.trim(), utenteSponsor ? utenteSponsor.id : null, 'sponsor', utenteSponsor ? 1 : 0);
-      inviaInvitoTeam(email_sponsor.trim(), nome, idTeam, 'sponsor').catch(console.error);
+      
     }
 
     // Leader separato
@@ -64,7 +64,7 @@ percorso.post('/', autenticaToken, async (req, res) => {
       const utenteLeader = db.prepara('SELECT id FROM utenti WHERE email = ?').ottieni(email_leader.trim());
       db.prepara('INSERT INTO membri_team (id_team, email_utente, id_utente, ruolo, iscritto) VALUES (?, ?, ?, ?, ?)')
         .esegui(idTeam, email_leader.trim(), utenteLeader ? utenteLeader.id : null, 'leader', utenteLeader ? 1 : 0);
-      inviaInvitoTeam(email_leader.trim(), nome, idTeam, 'leader').catch(console.error);
+      
     }
 
     // Membri
@@ -77,7 +77,7 @@ percorso.post('/', autenticaToken, async (req, res) => {
         const utenteEsistente = db.prepara('SELECT id FROM utenti WHERE email = ?').ottieni(pulita);
         db.prepara('INSERT INTO membri_team (id_team, email_utente, id_utente, ruolo, iscritto) VALUES (?, ?, ?, ?, ?)')
           .esegui(idTeam, pulita, utenteEsistente ? utenteEsistente.id : null, 'membro', utenteEsistente ? 1 : 0);
-        inviaInvitoTeam(pulita, nome, idTeam, 'membro').catch(console.error);
+        
       }
     }
 
@@ -91,7 +91,7 @@ percorso.post('/', autenticaToken, async (req, res) => {
         const utenteEsistente = db.prepara('SELECT id FROM utenti WHERE email = ?').ottieni(email);
         db.prepara('INSERT INTO membri_team (id_team, email_utente, id_utente, ruolo, iscritto) VALUES (?, ?, ?, ?, ?)')
           .esegui(idTeam, email, utenteEsistente ? utenteEsistente.id : null, 'stakeholder', utenteEsistente ? 1 : 0);
-        inviaInvitoTeam(email, nome, idTeam, 'stakeholder').catch(console.error);
+        
       }
     }
 
@@ -244,8 +244,7 @@ percorso.post('/:id/membri', autenticaToken, async (req, res) => {
     db.prepara('INSERT INTO membri_team (id_team, email_utente, id_utente, ruolo, iscritto) VALUES (?, ?, ?, ?, ?)')
       .esegui(idTeam, emailPulita, utenteEsistente ? utenteEsistente.id : null, ruoloPulito, utenteEsistente ? 1 : 0);
 
-    const { inviaInvitoTeam } = require('../utilita/email');
-    inviaInvitoTeam(emailPulita, teamDati.nome, idTeam, ruoloPulito).catch(console.error);
+    
 
     const membri = db.prepara('SELECT mt.*, u.nome_utente FROM membri_team mt LEFT JOIN utenti u ON mt.id_utente = u.id WHERE mt.id_team = ?').tutti(idTeam);
     res.status(201).json({ messaggio: 'Membro aggiunto.', membri });
@@ -294,5 +293,89 @@ percorso.delete('/:id/membri/:idMembro', autenticaToken, (req, res) => {
     db.prepara('DELETE FROM membri_team WHERE id = ? AND id_team = ?').esegui(parseInt(req.params.idMembro), idTeam);
     const membri = db.prepara('SELECT mt.*, u.nome_utente FROM membri_team mt LEFT JOIN utenti u ON mt.id_utente = u.id WHERE mt.id_team = ?').tutti(idTeam);
     res.json({ messaggio: 'Membro rimosso.', membri });
+  } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
+});
+
+// ============ CALENDARIO TEAM ============
+
+// GET /api/team/:id/giornaliere/:data
+percorso.get('/:id/giornaliere/:data', autenticaToken, (req, res) => {
+  try {
+    const db = ottieniDb();
+    const micro = db.prepara(`
+      SELECT ma.*, sa.nome as nome_attivita, sa.percentuale_completamento,
+             sa.email_responsabile, o.nome as nome_obiettivo, u.nome_utente as nome_responsabile
+      FROM micro_attivita ma
+      JOIN sotto_attivita sa ON ma.id_sotto_attivita = sa.id
+      JOIN obiettivi o ON sa.id_obiettivo = o.id
+      LEFT JOIN utenti u ON sa.email_responsabile = u.email
+      WHERE ma.data = ? AND o.id_team = ?
+      ORDER BY sa.email_responsabile, ma.ore DESC
+    `).tutti(req.params.data, parseInt(req.params.id));
+    res.json({ attivita: micro });
+  } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
+});
+
+// PATCH /api/team/:id/flag-giornaliero/:idMicro
+percorso.patch('/:id/flag-giornaliero/:idMicro', autenticaToken, (req, res) => {
+  try {
+    const db = ottieniDb();
+    const { flag } = req.body;
+    if (flag !== 0 && flag !== 1) return res.status(400).json({ errore: 'Flag deve essere 0 o 1.' });
+    const micro = db.prepara(`
+      SELECT ma.*, sa.email_responsabile FROM micro_attivita ma
+      JOIN sotto_attivita sa ON ma.id_sotto_attivita = sa.id WHERE ma.id = ?
+    `).ottieni(parseInt(req.params.idMicro));
+    if (!micro) return res.status(404).json({ errore: 'Non trovata.' });
+    if (micro.email_responsabile !== req.utente.email) return res.status(403).json({ errore: 'Solo il responsabile può modificare.' });
+    db.prepara('UPDATE micro_attivita SET flag_giornaliero = ? WHERE id = ?').esegui(flag, parseInt(req.params.idMicro));
+    res.json({ messaggio: 'Flag aggiornato.', flag });
+  } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
+});
+
+// PUT /api/team/:id/sposta-micro/:idMicro
+percorso.put('/:id/sposta-micro/:idMicro', autenticaToken, (req, res) => {
+  try {
+    const db = ottieniDb();
+    const { nuova_data } = req.body;
+    if (!nuova_data || !eGiornoLavorativo(nuova_data)) return res.status(400).json({ errore: 'Data non lavorativa.' });
+    const micro = db.prepara(`
+      SELECT ma.*, sa.email_responsabile FROM micro_attivita ma
+      JOIN sotto_attivita sa ON ma.id_sotto_attivita = sa.id WHERE ma.id = ?
+    `).ottieni(parseInt(req.params.idMicro));
+    if (!micro) return res.status(404).json({ errore: 'Non trovata.' });
+    const oreDest = db.prepara(`
+      SELECT COALESCE(SUM(ma.ore), 0) as tot FROM micro_attivita ma
+      JOIN sotto_attivita sa ON ma.id_sotto_attivita = sa.id
+      WHERE ma.data = ? AND ma.id != ? AND sa.email_responsabile = ?
+      AND COALESCE(sa.percentuale_completamento, 0) < 100
+    `).ottieni(nuova_data, micro.id, micro.email_responsabile);
+    if ((oreDest?.tot || 0) + micro.ore > 8) return res.status(400).json({ errore: `Supera 8h nel giorno ${nuova_data}.` });
+    db.prepara('UPDATE micro_attivita SET data = ? WHERE id = ?').esegui(nuova_data, micro.id);
+    res.json({ messaggio: 'Spostata.' });
+  } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
+});
+
+// GET /api/team/:id/report-giornaliero/:data
+percorso.get('/:id/report-giornaliero/:data', autenticaToken, (req, res) => {
+  try {
+    const db = ottieniDb();
+    const idTeam = parseInt(req.params.id);
+    const membri = db.prepara('SELECT mt.*, u.nome_utente FROM membri_team mt LEFT JOIN utenti u ON mt.id_utente = u.id WHERE mt.id_team = ?').tutti(idTeam);
+    const report = [];
+    for (const m of membri) {
+      const micro = db.prepara(`
+        SELECT ma.*, sa.nome as nome_attivita FROM micro_attivita ma
+        JOIN sotto_attivita sa ON ma.id_sotto_attivita = sa.id
+        JOIN obiettivi o ON sa.id_obiettivo = o.id
+        WHERE ma.data = ? AND o.id_team = ? AND sa.email_responsabile = ?
+        AND COALESCE(sa.percentuale_completamento, 0) < 100
+      `).tutti(req.params.data, idTeam, m.email_utente);
+      if (micro.length === 0) continue;
+      const ok = micro.filter(a => a.flag_giornaliero === 1);
+      const nok = micro.filter(a => a.flag_giornaliero !== 1);
+      report.push({ email: m.email_utente, nome: m.nome_utente || m.email_utente, ruolo: m.ruolo, totali: micro.length, ok: ok.map(a => ({ nome: a.nome_attivita, ore: a.ore })), nok: nok.map(a => ({ nome: a.nome_attivita, ore: a.ore })), percentuale: Math.round((ok.length / micro.length) * 100) });
+    }
+    res.json({ report, data: req.params.data });
   } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
 });

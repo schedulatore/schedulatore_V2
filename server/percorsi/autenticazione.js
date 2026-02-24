@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const limitaRichieste = require('express-rate-limit');
 const { ottieniDb } = require('../utilita/database');
 const { generaToken, autenticaToken, invalidaToken } = require('../middleware/autenticazione');
-const { inviaResetPassword } = require('../utilita/email');
 const { emailValida, nomeUtenteValido } = require('../middleware/validazione');
 
 const percorso = express.Router();
@@ -128,9 +127,8 @@ percorso.post('/password-dimenticata', limitatoreReset, async (req, res) => {
     db.prepara('UPDATE utenti SET token_reset = ?, scadenza_token_reset = ? WHERE id = ?')
       .esegui(tokenReset, scadenza, utente.id);
 
-    await inviaResetPassword(email, tokenReset);
-    console.log(`🔒 [AUTH] Reset password richiesto: ${email} da IP ${req.ip}`);
-    res.json({ messaggio: 'Se l\'email esiste, riceverai un codice di recupero.' });
+    console.log(`🔒 [AUTH] Reset password richiesto: ${email} — Codice: ${tokenReset} (scade tra 1h)`);
+    res.json({ messaggio: 'Richiesta inviata. Contatta l\'amministratore per ricevere il codice di reset.' });
   } catch (err) {
     console.error('Errore recupero password:', err);
     res.status(500).json({ errore: 'Errore del server.' });
@@ -170,6 +168,36 @@ percorso.get('/profilo', autenticaToken, (req, res) => {
   const utente = db.prepara('SELECT id, email, nome_utente, e_team_leader FROM utenti WHERE id = ?').ottieni(req.utente.id);
   if (!utente) return res.status(404).json({ errore: 'Utente non trovato.' });
   res.json({ utente });
+});
+
+// GET /api/auth/admin/reset-pendenti — codici reset attivi (solo admin/primo utente)
+percorso.get('/admin/reset-pendenti', autenticaToken, (req, res) => {
+  try {
+    const db = ottieniDb();
+    // Solo il primo utente registrato (id=1) può vedere i codici
+    if (req.utente.id !== 1) return res.status(403).json({ errore: 'Solo l\'amministratore può accedere.' });
+    const pendenti = db.prepara(`
+      SELECT email, nome_utente, token_reset, scadenza_token_reset 
+      FROM utenti WHERE token_reset IS NOT NULL AND scadenza_token_reset > ?
+    `).tutti(new Date().toISOString());
+    res.json({ pendenti });
+  } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
+});
+
+// POST /api/auth/admin/reset-forzato — admin resetta la password direttamente
+percorso.post('/admin/reset-forzato', autenticaToken, async (req, res) => {
+  try {
+    const db = ottieniDb();
+    if (req.utente.id !== 1) return res.status(403).json({ errore: 'Solo l\'amministratore può accedere.' });
+    const { email, nuovaPassword } = req.body;
+    if (!email || !nuovaPassword) return res.status(400).json({ errore: 'Email e nuova password obbligatori.' });
+    const utente = db.prepara('SELECT id FROM utenti WHERE email = ?').ottieni(email);
+    if (!utente) return res.status(404).json({ errore: 'Utente non trovato.' });
+    const hash = await bcrypt.hash(nuovaPassword, 12);
+    db.prepara('UPDATE utenti SET hash_password = ?, token_reset = NULL, scadenza_token_reset = NULL WHERE id = ?').esegui(hash, utente.id);
+    console.log(`✅ [ADMIN] Reset forzato password per ${email}`);
+    res.json({ messaggio: `Password reimpostata per ${email}.` });
+  } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
 });
 
 module.exports = percorso;
