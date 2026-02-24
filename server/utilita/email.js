@@ -1,14 +1,36 @@
 /**
- * Servizio Email — Resend API (HTTP) + SMTP fallback
- * Render Free blocca le porte SMTP. Resend usa HTTP → funziona.
+ * Servizio Email — Brevo API (HTTP) + Resend + SMTP fallback
+ * Render Free blocca SMTP. Brevo/Resend usano HTTP → funzionano.
  * 
- * Variabili:  RESEND_API_KEY (priorità) oppure SMTP_HOST (locale)
+ * Priorità: BREVO_API_KEY → RESEND_API_KEY → SMTP_HOST
+ * Brevo: 300 email/giorno gratis, nessun dominio richiesto
  */
 const nodemailer = require('nodemailer');
 
 const HOST_APP = process.env.URL_APP || process.env.RENDER_EXTERNAL_URL || 'http://localhost:3000';
 
-// ============ RESEND (HTTP) ============
+// ============ BREVO (HTTP — 300/giorno, qualsiasi destinatario) ============
+async function inviaViaBrevo({ destinatario, oggetto, html }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  const mittente = process.env.BREVO_FROM_EMAIL || process.env.SMTP_UTENTE || 'matteomartina108@gmail.com';
+  const nomeMittente = process.env.BREVO_FROM_NAME || 'Schedulatore';
+  console.log(`📧 [BREVO] Invio a ${destinatario}...`);
+  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
+    body: JSON.stringify({
+      sender: { name: nomeMittente, email: mittente },
+      to: [{ email: destinatario }],
+      subject: oggetto,
+      htmlContent: html
+    })
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || JSON.stringify(data));
+  return data;
+}
+
+// ============ RESEND (HTTP — richiede dominio per altri destinatari) ============
 async function inviaViaResend({ destinatario, oggetto, html }) {
   const apiKey = process.env.RESEND_API_KEY;
   const mittente = process.env.RESEND_FROM || 'Schedulatore <onboarding@resend.dev>';
@@ -39,6 +61,20 @@ async function inviaViaSMTP({ destinatario, oggetto, html }) {
 // ============ FUNZIONE PRINCIPALE ============
 async function inviaEmail({ destinatario, oggetto, html }) {
   console.log(`📧 Invio email a ${destinatario} — ${oggetto}`);
+
+  // 1. Brevo (prioritario — nessun dominio richiesto)
+  if (process.env.BREVO_API_KEY) {
+    try {
+      const ris = await inviaViaBrevo({ destinatario, oggetto, html });
+      console.log(`✅ Email inviata via Brevo! ID: ${ris.messageId || JSON.stringify(ris)}`);
+      return { successo: true, messageId: ris.messageId, metodo: 'brevo' };
+    } catch (err) {
+      console.error(`❌ Errore Brevo: ${err.message}`);
+      return { successo: false, errore: err.message, metodo: 'brevo' };
+    }
+  }
+
+  // 2. Resend (richiede dominio per destinatari esterni)
   if (process.env.RESEND_API_KEY) {
     try {
       const ris = await inviaViaResend({ destinatario, oggetto, html });
@@ -49,6 +85,8 @@ async function inviaEmail({ destinatario, oggetto, html }) {
       return { successo: false, errore: err.message, metodo: 'resend' };
     }
   }
+
+  // 3. SMTP (fallback locale)
   if (process.env.SMTP_HOST) {
     try {
       const info = await inviaViaSMTP({ destinatario, oggetto, html });
@@ -59,13 +97,14 @@ async function inviaEmail({ destinatario, oggetto, html }) {
       return { successo: false, errore: err.message, metodo: 'smtp' };
     }
   }
-  console.log('⚠️ Nessun servizio email configurato! Serve RESEND_API_KEY.');
-  return { successo: false, errore: 'Nessun servizio email configurato. Aggiungi RESEND_API_KEY.' };
+
+  console.log('⚠️ Nessun servizio email configurato! Serve BREVO_API_KEY.');
+  return { successo: false, errore: 'Nessun servizio email configurato. Aggiungi BREVO_API_KEY.' };
 }
 
 // ============ TEST ============
 async function inviaEmailTest(destinatario) {
-  const metodo = process.env.RESEND_API_KEY ? 'Resend API' : process.env.SMTP_HOST ? 'SMTP' : 'Nessuno';
+  const metodo = process.env.BREVO_API_KEY ? 'Brevo API' : process.env.RESEND_API_KEY ? 'Resend API' : process.env.SMTP_HOST ? 'SMTP' : 'Nessuno';
   return inviaEmail({
     destinatario, oggetto: '✅ Test Schedulatore — Email funzionante!',
     html: `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px;background:#fafafa;border-radius:12px;">
