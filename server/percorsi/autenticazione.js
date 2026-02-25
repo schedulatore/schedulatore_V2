@@ -42,17 +42,17 @@ percorso.post('/registrazione', limitatoreRegistrazione, async (req, res) => {
     if (password.length < 6 || password.length > 128) return res.status(400).json({ errore: 'La password deve avere tra 6 e 128 caratteri.' });
 
     const db = ottieniDb();
-    const esistente = db.prepara('SELECT id FROM utenti WHERE email = ?').ottieni(email);
+    const esistente = await db.prepara('SELECT id FROM utenti WHERE email = ?').ottieni(email);
     if (esistente) return res.status(409).json({ errore: 'Email già registrata.' });
 
     const hashPassword = await bcrypt.hash(password, 12);
-    db.prepara('INSERT INTO utenti (email, nome_utente, hash_password, e_team_leader) VALUES (?, ?, ?, ?)')
+    await db.prepara('INSERT INTO utenti (email, nome_utente, hash_password, e_team_leader) VALUES (?, ?, ?, ?)')
       .esegui(email, nome_utente, hashPassword, e_team_leader ? 1 : 0);
 
-    const utente = db.prepara('SELECT * FROM utenti WHERE email = ?').ottieni(email);
+    const utente = await db.prepara('SELECT * FROM utenti WHERE email = ?').ottieni(email);
     if (!utente) return res.status(500).json({ errore: 'Errore nella creazione utente.' });
 
-    db.prepara('UPDATE membri_team SET id_utente = ?, iscritto = 1 WHERE email_utente = ? AND id_utente IS NULL')
+    await db.prepara('UPDATE membri_team SET id_utente = ?, iscritto = 1 WHERE email_utente = ? AND id_utente IS NULL')
       .esegui(utente.id, email);
 
     const token = generaToken(utente);
@@ -76,7 +76,7 @@ percorso.post('/login', limitatoreLogin, async (req, res) => {
     if (!email || !password) return res.status(400).json({ errore: 'Email e password sono obbligatori.' });
 
     const db = ottieniDb();
-    const utente = db.prepara('SELECT * FROM utenti WHERE email = ?').ottieni(email);
+    const utente = await db.prepara('SELECT * FROM utenti WHERE email = ?').ottieni(email);
 
     if (!utente) {
       console.log(`⚠️  [AUTH] Login fallito (email inesistente): ${email} da IP ${req.ip}`);
@@ -104,7 +104,7 @@ percorso.post('/login', limitatoreLogin, async (req, res) => {
 });
 
 // POST /api/auth/logout
-percorso.post('/logout', autenticaToken, (req, res) => {
+percorso.post('/logout', autenticaToken, async (req, res) => {
   invalidaToken(req.token);
   console.log(`🚪 [AUTH] Logout: ${req.utente.email} da IP ${req.ip}`);
   res.json({ messaggio: 'Logout effettuato.' });
@@ -115,7 +115,7 @@ percorso.post('/password-dimenticata', limitatoreReset, async (req, res) => {
   try {
     const { email } = req.body;
     const db = ottieniDb();
-    const utente = db.prepara('SELECT * FROM utenti WHERE email = ?').ottieni(email);
+    const utente = await db.prepara('SELECT * FROM utenti WHERE email = ?').ottieni(email);
 
     if (!utente) {
       console.log(`⚠️  [AUTH] Reset per email inesistente: ${email} da IP ${req.ip}`);
@@ -124,7 +124,7 @@ percorso.post('/password-dimenticata', limitatoreReset, async (req, res) => {
 
     const tokenReset = crypto.randomBytes(32).toString('hex').substring(0, 8).toUpperCase();
     const scadenza = new Date(Date.now() + 3600000).toISOString();
-    db.prepara('UPDATE utenti SET token_reset = ?, scadenza_token_reset = ? WHERE id = ?')
+    await db.prepara('UPDATE utenti SET token_reset = ?, scadenza_token_reset = ? WHERE id = ?')
       .esegui(tokenReset, scadenza, utente.id);
 
     console.log(`🔒 [AUTH] Reset password richiesto: ${email} — Codice: ${tokenReset} (scade tra 1h)`);
@@ -143,7 +143,7 @@ percorso.post('/reimposta-password', limitatoreReset, async (req, res) => {
     if (nuovaPassword.length < 6) return res.status(400).json({ errore: 'La password deve avere almeno 6 caratteri.' });
 
     const db = ottieniDb();
-    const utente = db.prepara('SELECT * FROM utenti WHERE email = ? AND token_reset = ?').ottieni(email, token.toUpperCase());
+    const utente = await db.prepara('SELECT * FROM utenti WHERE email = ? AND token_reset = ?').ottieni(email, token.toUpperCase());
 
     if (!utente || !utente.scadenza_token_reset || new Date(utente.scadenza_token_reset) < new Date()) {
       console.log(`⚠️  [AUTH] Reset fallito (token non valido): ${email} da IP ${req.ip}`);
@@ -151,7 +151,7 @@ percorso.post('/reimposta-password', limitatoreReset, async (req, res) => {
     }
 
     const hashPassword = await bcrypt.hash(nuovaPassword, 12);
-    db.prepara('UPDATE utenti SET hash_password = ?, token_reset = NULL, scadenza_token_reset = NULL WHERE id = ?')
+    await db.prepara('UPDATE utenti SET hash_password = ?, token_reset = NULL, scadenza_token_reset = NULL WHERE id = ?')
       .esegui(hashPassword, utente.id);
 
     console.log(`✅ [AUTH] Password reimpostata: ${email} da IP ${req.ip}`);
@@ -163,20 +163,20 @@ percorso.post('/reimposta-password', limitatoreReset, async (req, res) => {
 });
 
 // GET /api/auth/profilo
-percorso.get('/profilo', autenticaToken, (req, res) => {
+percorso.get('/profilo', autenticaToken, async (req, res) => {
   const db = ottieniDb();
-  const utente = db.prepara('SELECT id, email, nome_utente, e_team_leader FROM utenti WHERE id = ?').ottieni(req.utente.id);
+  const utente = await db.prepara('SELECT id, email, nome_utente, e_team_leader FROM utenti WHERE id = ?').ottieni(req.utente.id);
   if (!utente) return res.status(404).json({ errore: 'Utente non trovato.' });
   res.json({ utente });
 });
 
 // GET /api/auth/admin/reset-pendenti — codici reset attivi (solo admin/primo utente)
-percorso.get('/admin/reset-pendenti', autenticaToken, (req, res) => {
+percorso.get('/admin/reset-pendenti', autenticaToken, async (req, res) => {
   try {
     const db = ottieniDb();
     // Solo il primo utente registrato (id=1) può vedere i codici
     if (req.utente.id !== 1) return res.status(403).json({ errore: 'Solo l\'amministratore può accedere.' });
-    const pendenti = db.prepara(`
+    const pendenti = await db.prepara(`
       SELECT email, nome_utente, token_reset, scadenza_token_reset 
       FROM utenti WHERE token_reset IS NOT NULL AND scadenza_token_reset > ?
     `).tutti(new Date().toISOString());
@@ -191,10 +191,10 @@ percorso.post('/admin/reset-forzato', autenticaToken, async (req, res) => {
     if (req.utente.id !== 1) return res.status(403).json({ errore: 'Solo l\'amministratore può accedere.' });
     const { email, nuovaPassword } = req.body;
     if (!email || !nuovaPassword) return res.status(400).json({ errore: 'Email e nuova password obbligatori.' });
-    const utente = db.prepara('SELECT id FROM utenti WHERE email = ?').ottieni(email);
+    const utente = await db.prepara('SELECT id FROM utenti WHERE email = ?').ottieni(email);
     if (!utente) return res.status(404).json({ errore: 'Utente non trovato.' });
     const hash = await bcrypt.hash(nuovaPassword, 12);
-    db.prepara('UPDATE utenti SET hash_password = ?, token_reset = NULL, scadenza_token_reset = NULL WHERE id = ?').esegui(hash, utente.id);
+    await db.prepara('UPDATE utenti SET hash_password = ?, token_reset = NULL, scadenza_token_reset = NULL WHERE id = ?').esegui(hash, utente.id);
     console.log(`✅ [ADMIN] Reset forzato password per ${email}`);
     res.json({ messaggio: `Password reimpostata per ${email}.` });
   } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }

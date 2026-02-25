@@ -107,8 +107,8 @@ function ottieniFestivitaAnno(anno) {
 }
 
 /** Calcola le ore giornaliere totali per un utente (esclude sotto-attività al 100%) */
-function ottieniOreGiornaliereUtente(db, idUtente, emailUtente) {
-  const righe = db.prepara(`
+async function ottieniOreGiornaliereUtente(db, idUtente, emailUtente) {
+  const righe = await db.prepara(`
     SELECT ma.data, SUM(ma.ore) as ore_totali
     FROM micro_attivita ma
     JOIN sotto_attivita sa ON ma.id_sotto_attivita = sa.id
@@ -138,12 +138,12 @@ module.exports = {
  * Strategia: per ogni giorno in conflitto, sposta le micro-attività in eccesso
  * (partendo da quelle con meno ore) ai prossimi giorni lavorativi disponibili.
  */
-function risolviConflitti(db, idUtente, emailUtente) {
+async function risolviConflitti(db, idUtente, emailUtente) {
   const MAX_ORE = 8;
   let spostamenti = 0;
 
   // Ottieni tutte le micro-attività dell'utente ordinate per data (escluse al 100%)
-  const tutteMicro = db.prepara(`
+  const tutteMicro = await db.prepara(`
     SELECT ma.id, ma.data, ma.ore, ma.id_sotto_attivita, sa.email_responsabile
     FROM micro_attivita ma
     JOIN sotto_attivita sa ON ma.id_sotto_attivita = sa.id
@@ -191,7 +191,7 @@ function risolviConflitti(db, idUtente, emailUtente) {
 
       if (tentativo < 365) {
         // Sposta la micro-attività
-        db.prepara('UPDATE micro_attivita SET data = ? WHERE id = ?').esegui(nuovoGiorno, micro.id);
+        await db.prepara('UPDATE micro_attivita SET data = ? WHERE id = ?').esegui(nuovoGiorno, micro.id);
         oreOccupate[giorno] -= micro.ore;
         oreOccupate[nuovoGiorno] = (oreOccupate[nuovoGiorno] || 0) + micro.ore;
         spostamenti++;
