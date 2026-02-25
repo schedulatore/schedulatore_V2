@@ -125,8 +125,8 @@ percorso.get('/:id', autenticaToken, async (req, res) => {
       let sommaPct = 0;
       for (const sa of ob.sotto_attivita) {
         sa.micro_attivita = await db.prepara('SELECT * FROM micro_attivita WHERE id_sotto_attivita = ? ORDER BY data').tutti(sa.id);
-        sa.collaboratori = await db.prepara('SELECT email_utente FROM collaboratori_attivita WHERE id_sotto_attivita = ?')
-          .tutti(sa.id).map(c => c.email_utente);
+        sa.collaboratori = (await db.prepara('SELECT email_utente FROM collaboratori_attivita WHERE id_sotto_attivita = ?')
+          .tutti(sa.id)).map(c => c.email_utente);
         sommaPct += (sa.percentuale_completamento || 0);
       }
       ob.percentuale_media = ob.sotto_attivita.length > 0 ? Math.round(sommaPct / ob.sotto_attivita.length) : 0;

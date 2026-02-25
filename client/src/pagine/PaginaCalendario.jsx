@@ -27,7 +27,7 @@ function PaginaCalendario({ utente }) {
           extendedProps: {
             ore: ev.ore, idMicro: ev.id, nomeObiettivo: ev.nome_obiettivo,
             idTeam: ev.id_team, nomeTeam: ev.nome_team, completata,
-            flagGiornaliero: ev.completamento_giornaliero || 0
+            flagGiornaliero: ev.flag_giornaliero || 0
           },
           className: completata ? 'fc-event-completed' : (ev.id_team ? 'fc-event-team' : 'fc-event-personal'),
           allDay: true, editable: !completata
@@ -58,12 +58,6 @@ function PaginaCalendario({ utente }) {
     catch (err) { impostaMessaggio('Errore.'); setTimeout(() => impostaMessaggio(''), 4000); }
   };
 
-  // Invio report manuale
-  const inviaReport = async () => {
-    try { const ris = await apiObiettivi.inviaReport(); impostaMessaggio(`📧 ${ris.data.messaggio}`); setTimeout(() => impostaMessaggio(''), 5000); }
-    catch (err) { impostaMessaggio('Errore invio report.'); setTimeout(() => impostaMessaggio(''), 4000); }
-  };
-
   const numConflitti = Object.keys(conflitti).length;
   const oggiStr = new Date().toISOString().split('T')[0];
 
@@ -76,7 +70,7 @@ function PaginaCalendario({ utente }) {
           <h1 className="page-title">Calendario</h1>
           <p className="page-subtitle">Trascina le attività · Segna OK/NOK giornaliero</p>
         </div>
-        <button className="btn btn-secondary" onClick={inviaReport}>📧 Invia Report Ora</button>
+        <button className="btn btn-secondary" onClick={sistemaConflitti} style={{ display: numConflitti > 0 ? 'inline-flex' : 'none' }}>🔧 Sistema Conflitti</button>
       </div>
 
       {messaggio && <div className="alert alert-success" style={{ marginBottom: 16 }}>✅ {messaggio}</div>}
@@ -156,7 +150,7 @@ function PaginaCalendario({ utente }) {
             <div style={{ padding: '16px 24px 20px' }}>
               {ePassato && eventiGiorno.length > 0 && (
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12, padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 'var(--radius-sm)' }}>
-                  💡 Clicca su ✅/❌ per segnare se hai completato l'attività oggi. Il report verrà inviato alle 17:00.
+                  💡 Clicca il cerchio per segnare OK (completata) o NOK (non fatta).
                 </div>
               )}
               {eventiGiorno.length === 0 ? (
@@ -182,12 +176,13 @@ function PaginaCalendario({ utente }) {
                           <button onClick={() => toggleFlag(e.extendedProps.idMicro, flag)}
                             style={{
                               width: 36, height: 36, minWidth: 36, borderRadius: '50%',
-                              border: `2px solid ${flag === 1 ? '#4caf50' : '#e94560'}`,
-                              background: flag === 1 ? 'rgba(80,200,120,0.15)' : 'rgba(233,69,96,0.1)',
+                              border: `2px solid ${flag === 1 ? '#4caf50' : '#ccc'}`,
+                              background: flag === 1 ? '#4caf50' : 'transparent',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: 16, cursor: 'pointer', transition: 'all 0.2s'
+                              fontSize: 15, cursor: 'pointer', transition: 'all 0.3s ease',
+                              color: flag === 1 ? 'white' : '#999'
                             }}>
-                            {flag === 1 ? '✅' : '❌'}
+                            {flag === 1 ? '✓' : ''}
                           </button>
                         )}
                         {/* Ore badge */}

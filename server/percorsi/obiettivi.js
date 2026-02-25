@@ -156,7 +156,7 @@ percorso.get('/', autenticaToken, async (req, res) => {
       let sommaPct = 0;
       for (const sa of ob.sotto_attivita) {
         sa.micro_attivita = await db.prepara('SELECT * FROM micro_attivita WHERE id_sotto_attivita = ? ORDER BY data').tutti(sa.id);
-        sa.collaboratori = await db.prepara('SELECT email_utente FROM collaboratori_attivita WHERE id_sotto_attivita = ?').tutti(sa.id).map(c => c.email_utente);
+        sa.collaboratori = (await db.prepara('SELECT email_utente FROM collaboratori_attivita WHERE id_sotto_attivita = ?').tutti(sa.id)).map(c => c.email_utente);
         sommaPct += (sa.percentuale_completamento || 0);
       }
       ob.percentuale_media = ob.sotto_attivita.length > 0 ? Math.round(sommaPct / ob.sotto_attivita.length) : 0;
@@ -229,7 +229,8 @@ percorso.post('/:id/sotto-attivita', autenticaToken, async (req, res) => {
     await db.prepara('INSERT INTO sotto_attivita (id_obiettivo, nome, ore_totali, ore_per_giorno, giorni_stimati, email_responsabile) VALUES (?, ?, ?, ?, ?, ?)')
       .esegui(idOb, nome, ore_totali, ore_per_giorno, Math.ceil(ore_totali / ore_per_giorno), email_responsabile || req.utente.email);
 
-    const sa = await db.prepara('SELECT * FROM sotto_attivita WHERE id_obiettivo = ? AND nome = ? ORDER BY id DESC').tutti(idOb, nome)[0];
+    const tuttiSa = await db.prepara('SELECT * FROM sotto_attivita WHERE id_obiettivo = ? AND nome = ? ORDER BY id DESC').tutti(idOb, nome);
+    const sa = tuttiSa[0];
     if (collaboratori?.length > 0) {
       for (const em of collaboratori) { const p = em.trim(); if (p) await db.prepara('INSERT INTO collaboratori_attivita (id_sotto_attivita, email_utente) VALUES (?, ?)').esegui(sa.id, p); }
     }
@@ -303,20 +304,5 @@ async function rigeneraTutte(db, idObiettivo, dataInizio) {
     if (micro.length > 0) await db.prepara('UPDATE sotto_attivita SET data_fine_stimata = ? WHERE id = ?').esegui(micro[micro.length - 1].data, sa.id);
   }
 }
-
-module.exports = percorso;
-
-// --- ENDPOINT COMPLETAMENTO GIORNALIERO ---
-
-// PATCH /api/obiettivi/micro/:idMicro/flag-giornaliero
-percorso.patch('/micro/:idMicro/flag-giornaliero', autenticaToken, async (req, res) => {
-  try {
-    const db = ottieniDb();
-    const { completato } = req.body; // 1 = OK, 0 = NOK
-    if (completato !== 0 && completato !== 1) return res.status(400).json({ errore: 'Valore deve essere 0 o 1.' });
-    await db.prepara('UPDATE micro_attivita SET completamento_giornaliero = ? WHERE id = ?').esegui(completato, parseInt(req.params.idMicro));
-    res.json({ messaggio: 'Flag aggiornato.', completato });
-  } catch (err) { res.status(500).json({ errore: 'Errore del server.' }); }
-});
 
 module.exports = percorso;
